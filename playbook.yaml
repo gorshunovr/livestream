@@ -52,60 +52,28 @@
               - tmux
               - curl
               - tigervnc-standalone-server
+          state: present
         - name: Enable icecast2
           lineinfile:
             path: /etc/default/icecast2
             regexp: '^ENABLE='
             line: 'ENABLE=true'
-        - name: Setup icecast2 server location
+        - name: Setup icecast2 server
           xml:
             path: /etc/icecast2/icecast.xml
-            xpath: /icecast/location
-            value: "Moscow, Russia"
+            xpath: "{{ item.xpath }}"
+            value: "{{ item.value }}"
+          loop:
+            - { xpath: '/icecast/location', value: 'Moscow, Russia'}
+            - { xpath: '/icecast/admin', value: 'info@linkmeup.ru'}
+            - { xpath: '/icecast/hostname', value: 'linkmeup.ru'}
+            - { xpath: '/icecast/authentication/source-password', value: '{{ icecast_password }}'}
+            - { xpath: '/icecast/authentication/relay-password', value: '{{ icecast_password }}'}
+            - { xpath: '/icecast/authentication/admin-password', value: '{{ icecast_password }}'}
+            - { xpath: '/icecast/mount[@type="default"]/charset', value: 'UTF-8'}
           notify:
             - restart icecast2
-        - name: Setup icecast2 server admin email
-          xml:
-            path: /etc/icecast2/icecast.xml
-            xpath: /icecast/admin
-            value: "info@linkmeup.ru"
-          notify:
-            - restart icecast2
-        - name: Setup icecast2 server hostname
-          xml:
-            path: /etc/icecast2/icecast.xml
-            xpath: /icecast/hostname
-            value: "linkmeup.ru"
-          notify:
-            - restart icecast2
-        - name: Setup icecast2 server source password
-          xml:
-            path: /etc/icecast2/icecast.xml
-            xpath: /icecast/authentication/source-password
-            value: "{{ icecast_password }}"
-          notify:
-            - restart icecast2
-        - name: Setup icecast2 server relay password
-          xml:
-            path: /etc/icecast2/icecast.xml
-            xpath: /icecast/authentication/relay-password
-            value: "{{ icecast_password }}"
-          notify:
-            - restart icecast2
-        - name: Setup icecast2 server admin password
-          xml:
-            path: /etc/icecast2/icecast.xml
-            xpath: /icecast/authentication/admin-password
-            value: "{{ icecast_password }}"
-          notify:
-            - restart icecast2
-        - name: Setup icecast2 server default mount charset
-          xml:
-            path: /etc/icecast2/icecast.xml
-            xpath: /icecast/mount[@type='default']/charset
-            value: UTF-8
-          notify:
-            - restart icecast2
+          no_log: True
         - name: Start icecast2 service on boot
           service:
             name: icecast2
