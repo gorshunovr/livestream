@@ -67,6 +67,7 @@
             - { xpath: '/icecast/location', value: 'Moscow, Russia'}
             - { xpath: '/icecast/admin', value: 'info@linkmeup.ru'}
             - { xpath: '/icecast/hostname', value: 'linkmeup.ru'}
+            - { xpath: '/icecast/listen-socket/bind-address', value: '::'}
             - { xpath: '/icecast/authentication/source-password', value: '{{ icecast_password }}'}
             - { xpath: '/icecast/authentication/relay-password', value: '{{ icecast_password }}'}
             - { xpath: '/icecast/authentication/admin-password', value: '{{ icecast_password }}'}
