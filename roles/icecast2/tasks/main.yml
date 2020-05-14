@@ -1,0 +1,24 @@
+---
+# tasks file for icecast2
+- name: install icecast
+  apt:
+    name: icecast2={{ icecast_version }}
+    state: present
+    update_cache: yes
+
+- name: enable icecast daemon (for icecast versions < 2.4.4)
+  lineinfile:
+   path: /etc/default/icecast2
+   regexp: "^ENABLE="
+   line: "ENABLE=true"
+
+- name: configure icecast
+  template:
+    src: icecast.xml.j2
+    dest: /etc/icecast2/icecast.xml
+    backup: yes
+    owner: root
+    group: icecast
+    mode: 0640
+  notify: restart icecast
+...

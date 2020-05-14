@@ -1,0 +1,57 @@
+<!-- {{ ansible_managed }} -->
+<icecast>
+    <location>{{ icecast_location }}</location>
+    <admin>{{ icecast_admin_email }}</admin>
+    <hostname>{{ icecast_hostname }}</hostname>
+    <fileserve>0</fileserve>
+    
+    <limits>
+        <clients>200</clients>
+        <sources>2</sources>
+        <queue-size>524288</queue-size>
+        <client-timeout>30</client-timeout>
+        <header-timeout>15</header-timeout>
+        <source-timeout>10</source-timeout>
+        <burst-on-connect>1</burst-on-connect>
+        <burst-size>65535</burst-size>
+    </limits>
+
+    <authentication>
+        <source-password>{{ icecast_authentication.source_password }}</source-password>
+        <relay-password>{{ icecast_authentication.relay_password }}</relay-password>
+        <admin-user>{{ icecast_authentication.admin_user }}</admin-user>
+        <admin-password>{{ icecast_authentication.admin_password }}</admin-password>
+    </authentication>
+
+    <listen-socket>
+        <port>{{ icecast_listen_port }}</port>
+        <bind-address>::</bind-address>
+    </listen-socket>
+
+    <mount type="default">
+        <charset>UTF-8</charset>
+    </mount>
+
+    <http-headers>
+        <header name="Access-Control-Allow-Origin" value="*" />
+    </http-headers>
+
+    <paths>
+        <basedir>/usr/share/icecast2</basedir>
+        <logdir>/var/log/icecast2</logdir>
+        <webroot>/usr/share/icecast2/web</webroot>
+        <adminroot>/usr/share/icecast2/admin</adminroot>
+        <alias source="/" destination="/status.xsl"/>
+    </paths>
+
+    <logging>
+        <accesslog>access.log</accesslog>
+        <errorlog>error.log</errorlog>
+        <loglevel>3</loglevel> 
+        <logsize>10000</logsize>
+    </logging>
+
+    <security>
+        <chroot>0</chroot>
+    </security>
+</icecast>
