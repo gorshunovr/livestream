@@ -111,11 +111,87 @@
           file:
             path: /home/linkmeup/.vnc/passwd
             mode: 0600
+        - name: Install Tigervnc startup script
+          copy:
+            dest: /home/linkmeup/Documents/linkmeup/start_tigervnc.sh
+            mode: 0750
+            content: |
+              #!/bin/bash
+              /usr/bin/tigervncserver -cleanstale -localhost yes :1
+        - name: Create Teamspeak client dir for specific version
+          file:
+            path: "/home/linkmeup/Documents/linkmeup/teamspeak-client/{{ teamspeak_client_version }}"
+            state: directory
         - name: Download Teamspeak client
           get_url:
             url: "https://files.teamspeak-services.com/releases/client/{{ teamspeak_client_version }}/TeamSpeak3-Client-linux_amd64-{{ teamspeak_client_version }}.run"
-            dest: "/home/linkmeup/TeamSpeak3-Client-linux_amd64-{{ teamspeak_client_version }}.run"
+            dest: "/home/linkmeup/Documents/linkmeup/teamspeak-client/{{ teamspeak_client_version }}/TeamSpeak3-Client-linux_amd64-{{ teamspeak_client_version }}.run"
             checksum: "sha256:{{ teamspeak_client_checksum }}"
+            mode: 0750
+          register: res
+        - name: Write temporary expect script
+          copy:
+            dest: /home/linkmeup/Documents/linkmeup/teamspeak-client/{{ teamspeak_client_version }}/script.exp
+            mode: 0750
+            content: |
+              #!/usr/bin/expect -f
+
+              set timeout 40
+              set env(LESS) "-E +G"
+              spawn ./TeamSpeak3-Client-linux_amd64-{{ teamspeak_client_version }}.run
+              match_max 100000
+              expect -exact ""
+              send -- "\r"
+              expect "Please type y to accept, n otherwise: "
+              send -- "y\r"
+              expect eof
+          when: res is changed
+        - name: Unpack Teamspeak client
+          command: ./script.exp
+          args:
+            chdir: /home/linkmeup/Documents/linkmeup/teamspeak-client/{{ teamspeak_client_version }}/
+            creates: /home/linkmeup/Documents/linkmeup/teamspeak-client/{{ teamspeak_client_version }}/TeamSpeak3-Client-linux_amd64
+          when: res is changed
+        - name: Remove temporary expect script
+          file:
+            path: /home/linkmeup/Documents/linkmeup/teamspeak-client/{{ teamspeak_client_version }}/script.exp
+            state: absent
+          when: res is changed
+        - name: ==CHECK== Check if symlink exists
+          stat:
+            path: "/home/linkmeup/Documents/linkmeup/teamspeak-client/latest/TeamSpeak3-Client-linux_amd64"
+          register: tsclientlatest
+        - name: ==CHECK== Check if symlink points to the same version we want to deploy
+          stat:
+            path: "/home/linkmeup/Documents/linkmeup/teamspeak-client/latest"
+          register: tsclientlatestsymlink
+          when:
+            - tsclientlatest is defined
+            - tsclientlatest.stat.exists
+        - name: ==CHECK== Set upgrade flag
+          set_fact:
+            upgradetsclient: "yes"
+          when:
+            - tsclientlatestsymlink.stat is defined
+            - '"/home/linkmeup/Documents/linkmeup/teamspeak-client/" ~ teamspeak_client_version != tsclientlatestsymlink.stat.lnk_target'
+        - name: ==UPGRADE== Ensure Teamspeak is stopped before upgrade
+          command: pkill -u linkmeup -f -TERM './ts3client_linux_amd64'
+          failed_when: false
+          when: upgradetsclient is defined
+        - name: Set symlink to point to the proposed latest Teamspeak version
+          file:
+            src: "/home/linkmeup/Documents/linkmeup/teamspeak-client/{{ teamspeak_client_version }}"
+            dest: "/home/linkmeup/Documents/linkmeup/teamspeak-client/latest"
+            state: link
+        - name: Install Tigervnc startup script
+          copy:
+            dest: /home/linkmeup/Documents/linkmeup/start_teamspeak_client.sh
+            mode: 0750
+            content: |
+              #!/bin/bash
+              pushd /home/linkmeup/Documents/linkmeup/teamspeak-client/latest/TeamSpeak3-Client-linux_amd64
+              ./ts3client_runscript.sh
+              popd
 
     - name: Setup Teamspeak server
       become: "yes"
@@ -152,25 +228,32 @@
         - name: ==CHECK== Check if symlink exists and server has been previously started (database file exists)
           stat:
             path: "/opt/teamspeak/latest/teamspeak3-server_linux_amd64/ts3server.sqlitedb"
-          register: tsdatabasefile
+          register: tsserverdatabasefile
         - name: ==CHECK== Check if symlink points to the same version we want to deploy
           stat:
             path: "/opt/teamspeak/latest"
-          register: latestsymlink
+          register: tsserverlatestsymlink
           when:
-            - tsdatabasefile is defined
-            - tsdatabasefile.stat.exists
+            - tsserverdatabasefile is defined
+            - tsserverdatabasefile.stat.exists
         - name: ==CHECK== Set upgrade flag
           set_fact:
             upgrade: "yes"
           when:
-            - latestsymlink.stat is defined
-            - '"/opt/teamspeak/" ~ teamspeak_server_version != latestsymlink.stat.lnk_target'
+            - tsserverlatestsymlink.stat is defined
+            - '"/opt/teamspeak/" ~ teamspeak_server_version != tsserverlatestsymlink.stat.lnk_target'
+        - name: ==CHECK== Check if unitfile exists
+          stat:
+            path: "/etc/systemd/system/teamspeak.service"
+          register: tsserverunitfile
         - name: ==UPGRADE== Ensure Teamspeak is stopped before upgrade
           service:
             name: teamspeak
             state: stopped
-          when: upgrade is defined
+          when:
+            - tsserverunitfile is defined
+            - tsserverunitfile.stat.exists
+            - upgrade is defined
         - name: ==UPGRADE== Copy over settings and data from old installation
           copy:
             src: "/opt/teamspeak/latest/teamspeak3-server_linux_amd64/{{ item }}"
@@ -215,11 +298,8 @@
 
               [Install]
               WantedBy=multi-user.target
-          register: res
-        - name: Reload systemd
-          systemd:
-            daemon_reload: "yes"
-          when: res is changed
+          notify:
+            - reload systemd
         - name: Ensure Teamspeak service starts on boot
           service:
             name: teamspeak
@@ -322,5 +402,8 @@
       service:
         name: teamspeak
         state: restarted
+    - name: reload systemd
+      systemd:
+        daemon_reload: "yes"
 
 ...
