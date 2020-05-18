@@ -21,10 +21,10 @@
     # https://teamspeak.com/en/downloads/#client
     - name: "teamspeak_client_version"
       prompt: "Teamspeak client version"
-      default: "3.5.2"
+      default: "3.5.3"
     - name: "teamspeak_client_checksum"
       prompt: "Teamspeak client checksum"
-      default: "d739fa78b41ef7b1423771ca237804981ffc7f14c4e620769cfa3fbc538aece8"
+      default: "ca9cdb5409042c86f2981dd32e046b7f8de4aab6a8333edc7e1fb83eb3d8e93a"
 
   tasks:
     - name: Check for required variables
