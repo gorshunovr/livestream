@@ -1,12 +1,26 @@
 ---
 # tasks file for icecast2
+
+- name: add icecast repo key
+  apt_key:
+    url: http://icecast.org/multimedia-obs.key
+    state: present
+  when: ansible_distribution_version == "18.04" or ansible_distribution_version == "16.04"
+
+- name: add icecast repo
+  apt_repository:
+    repo: deb http://download.opensuse.org/repositories/multimedia:/xiph/xUbuntu_{{ ansible_distribution_version }}/ ./
+    state: present
+    filename: icecast2
+  when: ansible_distribution_version == "18.04" or ansible_distribution_version == "16.04"
+
 - name: install icecast
   apt:
     name: icecast2={{ icecast_version }}
     state: present
     update_cache: yes
 
-- name: enable icecast daemon (for icecast versions < 2.4.4)
+- name: enable icecast daemon
   lineinfile:
    path: /etc/default/icecast2
    regexp: "^ENABLE="

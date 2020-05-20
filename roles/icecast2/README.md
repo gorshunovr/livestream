@@ -11,7 +11,7 @@ default variables:
 icecast_location: Earth
 icecast_admin_email: info@linkmeup.ru
 icecast_hostname: live.linkmeup.ru
-icecast_version: 2.4*
+icecast_version: 2.4.4*
 icecast_listen_port: 8000
 icecast_authentication:
   source_password: "5BuziM39pTvaNj7okyAs"
@@ -34,4 +34,3 @@ Tested on
 - Ubuntu 20.04 LTS
 - Ubuntu 16.04 LTS
 - Ubuntu 18.04 LTS
-- Debian 9
