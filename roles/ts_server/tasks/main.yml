@@ -1,0 +1,78 @@
+---
+# tasks file for ts_server
+
+- name: install packages
+  apt:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  loop:
+    - darkice=1.3*
+    - pulseaudio
+    - xfce4
+    - xfce4-goodies
+    - tigervnc-standalone-server
+    - audacious
+
+- name: add linkmeup user
+  user:
+    name: linkmeup
+    comment: "linkmeup user"
+    password: "!"
+    update_password: always
+    shell: /bin/bash
+
+- name: configure darkice
+  template:
+    src: darkice.cfg.j2
+    dest: /etc/darkice.cfg
+    mode: 0640
+    owner: linkmeup
+    group: linkmeup
+
+- name: copy music
+  copy:
+    src: ~/music
+    dest: /home/linkmeup/
+    owner: linkmeup
+    group: linkmeup
+
+- name: make start script
+  copy:
+    dest: /home/linkmeup/start.sh
+    mode: 0750
+    owner: linkmeup
+    group: linkmeup
+    content: |
+      #!/bin/bash
+      pulseaudio --start
+      audacious -p -e music/ &
+      darkice -v 1 -c /etc/darkice.cfg
+
+- name: make vnc config directory
+  file:
+    path: /home/linkmeup/.vnc
+    state: directory
+    owner: linkmeup
+    group: linkmeup
+
+- name: configure vnc
+  template:
+    src: xstartup.j2
+    dest: /home/linkmeup/.vnc/xstartup
+    mode: 0750
+    owner: linkmeup
+    group: linkmeup
+
+- name: generate vnc passwd file
+  shell:
+    cmd: echo {{ linkmeup_vnc_password }} | tigervncpasswd -f > /home/linkmeup/.vnc/passwd
+    creates: /home/linkmeup/.vnc/passwd
+
+- name: change permission on vnc passwd file
+  file:
+    path: /home/linkmeup/.vnc/passwd
+    mode: 0600
+    owner: linkmeup
+    group: linkmeup
+...

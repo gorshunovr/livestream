@@ -1,0 +1,30 @@
+# {{ ansible_managed }}
+[general]
+duration        = 0
+bufferSecs      = 10
+reconnect       = yes
+realtime        = yes
+rtprio          = 3         # scheduling priority for the realtime threads
+
+[input]
+device          = default
+sampleRate      = 44100
+bitsPerSample   = 16
+channel         = 1
+
+[icecast2-0]
+bitrateMode     = cbr
+format          = mp3
+bitrate         = 128
+server          = {{ icecast_hostname }}
+port            = {{ icecast_listen_port }}
+password        = {{ icecast_authentication.source_password }}
+mountPoint      = {{ darkice.mount_point }}
+name            = {{ darkice.name }}
+description     = {{ darkice.description }}                            
+url             = {{ darkice.url }}
+genre           = Talks
+public          = no
+localDumpFile	= {{ darkice.dump_file }}
+fileAddDate	= yes
+fileDateFormat	= %F-%R
