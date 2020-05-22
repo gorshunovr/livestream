@@ -1,0 +1,336 @@
+---
+# tasks file for ts
+
+- name: Check for required variables
+  tags:
+    - vars
+  fail:
+    msg: "Please, define required password variables"
+  when: vars[item] is not defined or vars[item] == "" # noqa 602
+  with_items:
+    - icecast_password
+    - linkmeup_vnc_password
+- name: Install system software
+  become: "yes"
+  tags:
+    - system
+  block:
+    - name: Install software
+      apt:
+        name:
+          - audacious
+          - darkice
+          - expect
+          - tmux
+          - tigervnc-standalone-server
+        update_cache: "yes"
+        state: present
+
+- name: Add locked linkmeup user
+  become: "yes"
+  tags:
+    - user
+  user:
+    name: linkmeup
+    comment: "linkmeup user"
+    password: "!"
+    update_password: always
+- name: Configure linkmeup user
+  become: "yes"
+  become_user: linkmeup
+  tags:
+    - user
+  block:
+    - name: Create vnc config dir
+      file:
+        path: /home/linkmeup/.vnc
+        state: directory
+    - name: Setup vnc password
+      shell: "umask 0066; echo -n {{ linkmeup_vnc_password }} | tigervncpasswd -f > /home/linkmeup/.vnc/passwd"
+      args:
+        creates: /home/linkmeup/.vnc/passwd
+      register: res
+    - name: Ensure password file has correct permissions in case it preexisted
+      file:
+        path: /home/linkmeup/.vnc/passwd
+        mode: 0600
+      when: res is changed
+    - name: Ensure directory exists
+      file:
+        path: /home/linkmeup/Documents/linkmeup
+        state: directory
+    - name: Install Tigervnc startup script
+      copy:
+        dest: /home/linkmeup/Documents/linkmeup/start_tigervnc.sh
+        mode: 0750
+        content: |
+          #!/bin/bash
+          /usr/bin/tigervncserver -cleanstale -localhost yes :1
+    - name: Create Teamspeak client dir for specific version
+      file:
+        path: "/home/linkmeup/Documents/linkmeup/teamspeak-client/{{ teamspeak_client_version }}"
+        state: directory
+    - name: Set ts client URL
+      set_fact:
+        ts_client_url: >-
+          https://files.teamspeak-services.com/releases/client/
+          {{ teamspeak_client_version }}/TeamSpeak3-Client-linux_amd64-{{ teamspeak_client_version }}.run
+    - name: Set ts client filesystem path
+      set_fact:
+        ts_client_fs_path: >-
+          /home/linkmeup/Documents/linkmeup/teamspeak-client/
+          {{ teamspeak_client_version }}/TeamSpeak3-Client-linux_amd64-{{ teamspeak_client_version }}.run
+    - name: Trim space in ts client url and filesystem path
+      set_fact:
+        ts_client_url: "{{ ts_client_url | regex_replace(' ', '') }}"
+        ts_client_fs_path: "{{ ts_client_fs_path | regex_replace(' ', '') }}"
+    - name: Download Teamspeak client
+      get_url:
+        url: "{{ ts_client_url }}"
+        dest: "{{ ts_client_fs_path }}"
+        checksum: "sha256:{{ teamspeak_client_checksum }}"
+        mode: 0750
+      register: res
+    - name: Write temporary expect script
+      copy:
+        dest: /home/linkmeup/Documents/linkmeup/teamspeak-client/{{ teamspeak_client_version }}/script.exp
+        mode: 0750
+        content: |
+          #!/usr/bin/expect -f
+
+          set timeout 40
+          set env(LESS) "-E +G"
+          spawn ./TeamSpeak3-Client-linux_amd64-{{ teamspeak_client_version }}.run
+          match_max 100000
+          expect -exact ""
+          send -- "\r"
+          expect "Please type y to accept, n otherwise: "
+          send -- "y\r"
+          expect eof
+      when: res is changed
+    - name: Unpack Teamspeak client
+      command: ./script.exp
+      args:
+        chdir: /home/linkmeup/Documents/linkmeup/teamspeak-client/{{ teamspeak_client_version }}/
+        creates: /home/linkmeup/Documents/linkmeup/teamspeak-client/{{ teamspeak_client_version }}/TeamSpeak3-Client-linux_amd64
+      when: res is changed
+    - name: Remove temporary expect script
+      file:
+        path: /home/linkmeup/Documents/linkmeup/teamspeak-client/{{ teamspeak_client_version }}/script.exp
+        state: absent
+      when: res is changed
+    - name: ==CHECK== Check if symlink exists
+      stat:
+        path: "/home/linkmeup/Documents/linkmeup/teamspeak-client/latest/TeamSpeak3-Client-linux_amd64"
+      register: tsclientlatest
+    - name: ==CHECK== Check if symlink points to the same version we want to deploy
+      stat:
+        path: "/home/linkmeup/Documents/linkmeup/teamspeak-client/latest"
+      register: tsclientlatestsymlink
+      when:
+        - tsclientlatest is defined
+        - tsclientlatest.stat.exists
+    - name: ==CHECK== Set upgrade flag
+      set_fact:
+        upgradetsclient: "yes"
+      when:
+        - tsclientlatestsymlink.stat is defined
+        - '"/home/linkmeup/Documents/linkmeup/teamspeak-client/" ~ teamspeak_client_version != tsclientlatestsymlink.stat.lnk_target'
+    - name: ==UPGRADE== Ensure Teamspeak is stopped before upgrade
+      command: pkill -u linkmeup -f -TERM './ts3client_linux_amd64'
+      failed_when: false
+      when: upgradetsclient is defined
+    - name: Set symlink to point to the proposed latest Teamspeak version
+      file:
+        src: "/home/linkmeup/Documents/linkmeup/teamspeak-client/{{ teamspeak_client_version }}"
+        dest: "/home/linkmeup/Documents/linkmeup/teamspeak-client/latest"
+        state: link
+    - name: Install Tigervnc startup script
+      copy:
+        dest: /home/linkmeup/Documents/linkmeup/start_teamspeak_client.sh
+        mode: 0750
+        content: |
+          #!/bin/bash
+          pushd /home/linkmeup/Documents/linkmeup/teamspeak-client/latest/TeamSpeak3-Client-linux_amd64
+          ./ts3client_runscript.sh
+          popd
+
+- name: Setup Teamspeak server
+  become: "yes"
+  tags:
+    - teamspeak
+  block:
+    - name: Add system teamspeak server user
+      user:
+        name: teamspeak
+        comment: "Teamspeak server user"
+        system: "yes"
+        create_home: "yes"
+        home: "/opt/teamspeak"
+        password: "!"
+        shell: /usr/sbin/nologin
+        update_password: always
+    - name: Create Teamspeak server dir for specific version
+      file:
+        path: "/opt/teamspeak/{{ teamspeak_server_version }}"
+        state: directory
+    - name: Set ts server filesystem path
+      set_fact:
+        ts_server_url: >-
+          https://files.teamspeak-services.com/releases/server/
+          {{ teamspeak_server_version }}/teamspeak3-server_linux_amd64-{{ teamspeak_server_version }}.tar.bz2
+    - name: Trim space in ts server url
+      set_fact:
+        ts_server_url: "{{ ts_server_url | regex_replace(' ', '') }}"
+    - name: Download teamspeak server
+      get_url:
+        url: "{{ ts_server_url }}"
+        dest: "/opt/teamspeak/{{ teamspeak_server_version }}/teamspeak3-server_linux_amd64-{{ teamspeak_server_version }}.tar.bz2"
+        checksum: "sha256:{{ teamspeak_server_checksum }}"
+    - name: Unarchive teamspeak server
+      unarchive:
+        src: "/opt/teamspeak/{{ teamspeak_server_version }}/teamspeak3-server_linux_amd64-{{ teamspeak_server_version }}.tar.bz2"
+        dest: "/opt/teamspeak/{{ teamspeak_server_version }}/"
+        remote_src: "yes"
+        creates: "/opt/teamspeak/{{ teamspeak_server_version }}/teamspeak3-server_linux_amd64"
+        owner: teamspeak
+        group: teamspeak
+    - name: ==CHECK== Check if symlink exists and server has been previously started (database file exists)
+      stat:
+        path: "/opt/teamspeak/latest/teamspeak3-server_linux_amd64/ts3server.sqlitedb"
+      register: tsserverdatabasefile
+    - name: ==CHECK== Check if symlink points to the same version we want to deploy
+      stat:
+        path: "/opt/teamspeak/latest"
+      register: tsserverlatestsymlink
+      when:
+        - tsserverdatabasefile is defined
+        - tsserverdatabasefile.stat.exists
+    - name: ==CHECK== Set upgrade flag
+      set_fact:
+        upgrade: "yes"
+      when:
+        - tsserverlatestsymlink.stat is defined
+        - '"/opt/teamspeak/" ~ teamspeak_server_version != tsserverlatestsymlink.stat.lnk_target'
+    - name: ==CHECK== Check if unitfile exists
+      stat:
+        path: "/etc/systemd/system/teamspeak.service"
+      register: tsserverunitfile
+    - name: ==UPGRADE== Ensure Teamspeak is stopped before upgrade
+      service:
+        name: teamspeak
+        state: stopped
+      when:
+        - tsserverunitfile is defined
+        - tsserverunitfile.stat.exists
+        - upgrade is defined
+    - name: ==UPGRADE== Copy over settings and data from old installation
+      copy:
+        src: "/opt/teamspeak/latest/teamspeak3-server_linux_amd64/{{ item }}"
+        dest: "/opt/teamspeak/{{ teamspeak_server_version }}/teamspeak3-server_linux_amd64/"
+        owner: teamspeak
+        group: teamspeak
+      # I hope there are no other files needed
+      with_items:
+        - files/
+        - logs/
+        - query_ip_blacklist.txt
+        - query_ip_whitelist.txt
+        - ssh_host_rsa_key
+        - ts3server.sqlitedb
+      when: upgrade is defined
+    - name: Set symlink to point to the proposed latest Teamspeak version
+      file:
+        src: "/opt/teamspeak/{{ teamspeak_server_version }}"
+        dest: "/opt/teamspeak/latest"
+        state: link
+        owner: teamspeak
+        group: teamspeak
+    - name: Install teamspeak service systemd unitfile
+      copy:
+        dest: /etc/systemd/system/teamspeak.service
+        content: |
+          [Unit]
+          Description=TeamSpeak3 Server
+          Wants=network-online.target
+          After=syslog.target network.target
+
+          [Service]
+          WorkingDirectory=/opt/teamspeak/latest/teamspeak3-server_linux_amd64/
+          User=teamspeak
+          Group=teamspeak
+          Type=forking
+          Environment="TS3SERVER_LICENSE=accept"
+          ExecStart=/opt/teamspeak/latest/teamspeak3-server_linux_amd64/ts3server_startscript.sh start
+          ExecStop=/opt/teamspeak/latest/teamspeak3-server_linux_amd64/ts3server_startscript.sh stop
+          ExecReload=/opt/teamspeak/latest/teamspeak3-server_linux_amd64/ts3server_startscript.sh reload
+          PIDFile=/opt/teamspeak/latest/teamspeak3-server_linux_amd64/ts3server.pid
+
+          [Install]
+          WantedBy=multi-user.target
+      notify:
+        - reload systemd
+    - name: Ensure Teamspeak service starts on boot
+      service:
+        name: teamspeak
+        enabled: "yes"
+    # If Teamspeak server starts and immediately stops - remove /dev/shm/7gbhujb54g8z9hu43jre8 file
+    - name: Ensure Teamspeak service is running now
+      service:
+        name: teamspeak
+        state: started
+    - name: Teamspeak password hint
+      debug:
+        msg: "See journalctl --unit teamspeak.service for Teamspeak server passwords information."
+
+- name: Setup DarkIce service
+  become: "yes"
+  become_user: linkmeup
+  tags:
+    - darkice
+  block:
+    - name: Create darkice config dir
+      file:
+        path: /home/linkmeup/.darkice
+        state: directory
+        mode: 0750
+    # TODO: add stream recording
+    - name: Write DarkIce config
+      copy:
+        dest: /home/linkmeup/.darkice/darkice.cfg
+        mode: 0640
+        content: |
+          [general]
+          duration = 0
+          bufferSecs = 10
+
+          [input]
+          device = default
+          sampleRate = 48000
+          bitsPerSample = 16
+          channel = 1
+
+          [icecast2-0]
+          bitrateMode = cbr
+          format = mp3
+          bitrate = 128
+          quality = 0.8
+          server = {{ icecast_address }}
+          port = 8000
+          password = {{ icecast_password }}
+          mountPoint = live
+          name = Подкаст linkmeup
+          description = Прямой эфир подкаста linkmeup
+          url = https://linkmeup.ru/
+          genre = Talks
+          public = no
+
+    - name: Write DarkIce startup script
+      copy:
+        dest: /home/linkmeup/Documents/linkmeup/start_darkice.sh
+        mode: 0750
+        content: |
+          #!/bin/bash
+          darkice -v 1 -c /home/linkmeup/.darkice/darkice.cfg
+
+...

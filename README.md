@@ -1,3 +1,4 @@
-# linkmeup online streaming server
+# linkmeup online streaming servers
 
-The playbook.yaml file sets up streaming VM. See playbook contents for details.
+Some documentation could be found in [docs/](docs/).
+The [playbook.yaml](playbook.yaml) file sets up streaming VMs. See playbook and roles contents for details.

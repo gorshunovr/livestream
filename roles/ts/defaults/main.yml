@@ -1,0 +1,12 @@
+---
+# defaults file for ts
+icecast_address: localhost
+icecast_password: "c2m30nagbq3bGp7v"
+linkmeup_vnc_password: "o108F40c13nqemDH"
+# https://teamspeak.com/en/downloads/#server
+teamspeak_server_version: "3.12.1"
+teamspeak_server_checksum: cfbffba30a570f0ba33a74ce5e5dbda54ce564d917a27183cdcaf82cc2b4abb7"
+# https://teamspeak.com/en/downloads/#client
+teamspeak_client_version: "3.5.3"
+teamspeak_client_checksum: "ca9cdb5409042c86f2981dd32e046b7f8de4aab6a8333edc7e1fb83eb3d8e93a"
+...
