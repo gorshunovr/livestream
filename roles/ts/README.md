@@ -8,6 +8,11 @@ Role Variables
 
 See [defaults/main.yml](defaults/main.yml).
 
+Prerequisites
+-------------
+
+Ubuntu 18.04 VM with Gnome 3 desktop and Sound card.
+
 Example Playbook
 ----------------
 
